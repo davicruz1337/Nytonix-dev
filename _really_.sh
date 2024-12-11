@@ -56,7 +56,7 @@ sudo grub-mkconfig -o "$BUILD_DIR/boot/grub/grub.cfg"
 # Create minimal root filesystem
 echo "Setting up root filesystem..."
 mkdir -p "$BUILD_DIR"/{bin,sbin,etc,proc,sys,usr/bin,usr/sbin,home/nytonix,boot}
-cp -a /bin/{bash,ls,mkdir,cat,mount,umount} "$BUILD_DIR/bin/"
+cp --no-preserve=mode,ownership /bin/{bash,ls,mkdir,cat,mount,umount} "$BUILD_DIR/bin/"
 cp -a /usr/bin/{foot,dmenu} "$BUILD_DIR/usr/bin/"
 
 # Configure Sway
