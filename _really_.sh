@@ -24,7 +24,7 @@ mkdir -p "$BUILD_DIR"
 
 # Install dependencies
 echo "Installing base dependencies..."
-sudo pacman -Syu --noconfirm base-devel grub efibootmgr squashfs-tools wget vim git gcc clang lightdm sway flatpak apparmor firejail networkmanager zsh neofetch dmenu papirus-icon-theme bc perl python cpio flex bison elfutils dosfstools mount util-linux
+sudo pacman -Syu --noconfirm base-devel grub efibootmgr squashfs-tools wget vim git gcc clang lightdm sway flatpak apparmor firejail networkmanager zsh neofetch dmenu papirus-icon-theme bc perl python cpio flex bison elfutils dosfstools util-linux
 
 # Select the target device
 TARGET_DEVICE="/dev/sda"
