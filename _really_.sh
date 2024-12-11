@@ -24,7 +24,7 @@ mkdir -p "$BUILD_DIR"
 
 # Install dependencies
 echo "Installing base dependencies..."
-sudo pacman -Syu --noconfirm base-devel grub efibootmgr squashfs-tools wget vim git gcc clang lightdm sway flatpak apparmor firejail networkmanager zsh neofetch dmenu papirus-icon-theme bc perl python cpio flex bison elfutils dosfstools  util-linux
+sudo pacman -Syu --noconfirm base-devel grub efibootmgr squashfs-tools wget vim git gcc clang lightdm sway flatpak apparmor firejail networkmanager zsh neofetch dmenu papirus-icon-theme bc perl python cpio flex bison elfutils dosfstools mount util-linux
 
 # Select the target device
 TARGET_DEVICE="/dev/sda"
@@ -36,24 +36,20 @@ sudo umount "${TARGET_DEVICE}"* || true
 # Partition the target device
 echo "Partitioning $TARGET_DEVICE..."
 sudo parted -s "$TARGET_DEVICE" mklabel gpt
-sudo parted -s "$TARGET_DEVICE" mkpart primary fat32 1MiB 512MiB
-sudo parted -s "$TARGET_DEVICE" mkpart primary ext4 512MiB 100%
-sudo parted -s "$TARGET_DEVICE" set 1 esp on
+sudo parted -s "$TARGET_DEVICE" mkpart primary fat32 1MiB 100%
+sudo parted -s "$TARGET_DEVICE" set 1 boot on
 
-# Format the partitions
-echo "Formatting partitions..."
+# Format the partition
+echo "Formatting partition..."
 sudo mkfs.vfat -F 32 "${TARGET_DEVICE}1"
-sudo mkfs.ext4 "${TARGET_DEVICE}2"
 
-# Mount partitions
-echo "Mounting partitions..."
-sudo mount "${TARGET_DEVICE}2" "$BUILD_DIR"
-sudo mkdir -p "$BUILD_DIR/boot/efi"
-sudo mount "${TARGET_DEVICE}1" "$BUILD_DIR/boot/efi"
+# Mount partition
+echo "Mounting partition..."
+sudo mount "${TARGET_DEVICE}1" "$BUILD_DIR"
 
 # Configure GRUB
 echo "Configuring GRUB..."
-sudo grub-install --target=x86_64-efi --efi-directory="$BUILD_DIR/boot/efi" --boot-directory="$BUILD_DIR/boot" --removable --recheck
+sudo grub-install --target=x86_64-efi --efi-directory="$BUILD_DIR" --boot-directory="$BUILD_DIR/boot" --removable --recheck
 
 sudo grub-mkconfig -o "$BUILD_DIR/boot/grub/grub.cfg"
 
@@ -113,6 +109,24 @@ cat > "$BUILD_DIR/usr/local/bin/install.sh" <<'EOF'
 
 set -e
 
+# Display Nytonix logo animation
+frames=(
+".______  "
+":      \ "
+"|       |"
+"|   |   |"
+"|___|   |"
+"    |___|"
+"         "
+"         "
+)
+
+for frame in "${frames[@]}"; do
+    clear
+    echo -e "\n\n\n\n\n\n$frame"
+    sleep 0.2
+done
+
 # Display disks for user
 echo "Available disks:"
 lsblk -d -o NAME,SIZE | sort -k2 -h
@@ -120,49 +134,58 @@ lsblk -d -o NAME,SIZE | sort -k2 -h
 echo -n "Enter the disk to install NytonixOS (e.g., /dev/sda): "
 read DISK
 
-cryptsetup luksFormat \$DISK
-cryptsetup open \$DISK cryptroot
+# Partition and format the disk
+sudo parted -s "$DISK" mklabel gpt
+sudo parted -s "$DISK" mkpart primary fat32 1MiB 512MiB
+sudo parted -s "$DISK" mkpart primary fat32 512MiB 100%
+sudo parted -s "$DISK" set 1 esp on
 
-pvcreate /dev/mapper/cryptroot
-vgcreate nytonix-vg /dev/mapper/cryptroot
-lvcreate -L 20G -n root nytonix-vg
-lvcreate -L 4G -n swap nytonix-vg
-lvcreate -l 100%FREE -n home nytonix-vg
+sudo mkfs.vfat -F 32 "${DISK}1"
+sudo mkfs.vfat -F 32 "${DISK}2"
 
-mkfs.ext4 /dev/nytonix-vg/root
-mkfs.ext4 /dev/nytonix-vg/home
-mkswap /dev/nytonix-vg/swap
+# Mount the partitions
+sudo mount "${DISK}2" /mnt
+sudo mkdir -p /mnt/boot/efi
+sudo mount "${DISK}1" /mnt/boot/efi
 
-mount /dev/nytonix-vg/root /mnt
-mkdir -p /mnt/home
-mount /dev/nytonix-vg/home /mnt/home
-swapon /dev/nytonix-vg/swap
+# Install base system
+sudo pacstrap /mnt base base-devel linux linux-firmware grub efibootmgr sway networkmanager apt
 
+# Install open-source drivers
+sudo pacstrap /mnt mesa xf86-video-vesa xf86-video-amdgpu xf86-video-nouveau xf86-video-intel
+
+# Configure the system
+echo "Configuring the system..."
+echo "nytonixOS" | sudo tee /mnt/etc/hostname
+sudo arch-chroot /mnt systemctl enable NetworkManager
+sudo arch-chroot /mnt systemctl enable sway
+sudo arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot/efi --boot-directory=/boot --recheck
+sudo arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
+
+# Set up user
 echo -n "Set root password: "
 read -s ROOT_PASSWORD
+sudo arch-chroot /mnt /bin/bash -c "echo root:$ROOT_PASSWORD | chpasswd"
 
 echo -n "Enter a username: "
 read USERNAME
+sudo arch-chroot /mnt useradd -m \$USERNAME
 
 echo -n "Set password for \$USERNAME: "
 read -s USER_PASSWORD
+sudo arch-chroot /mnt /bin/bash -c "echo \$USERNAME:$USER_PASSWORD | chpasswd"
 
-echo "Configuring the system..."
-arch-chroot /mnt /bin/bash -c "echo root:\$ROOT_PASSWORD | chpasswd"
-arch-chroot /mnt useradd -m \$USERNAME
-arch-chroot /mnt /bin/bash -c "echo \$USERNAME:\$USER_PASSWORD | chpasswd"
-arch-chroot /mnt systemctl enable sway
-arch-chroot /mnt systemctl enable apparmor
-arch-chroot /mnt systemctl enable NetworkManager
-arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot/efi --boot-directory=/boot --recheck
-arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
-arch-chroot /mnt flatpak install flathub org.mozilla.firefox -y
+# Install basic utilities and terminal emulator
+sudo arch-chroot /mnt pacman -S --noconfirm foot htop vim neofetch
+
+# Finish
+echo "Installation complete! Reboot to enjoy NytonixOS."
 EOF
 chmod +x "$BUILD_DIR/usr/local/bin/install.sh"
 
+
 # Unmount the partition
 echo "Finalizing setup..."
-sudo umount "$BUILD_DIR/boot/efi"
 sudo umount "$BUILD_DIR"
 
 echo "Bootable system created on $TARGET_DEVICE. You can now boot it from the BIOS! The installer script is available as 'install.sh'."
