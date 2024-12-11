@@ -65,11 +65,12 @@ grub-install --target=i386-pc --boot-directory="$BUILD_DIR/rootfs/boot" --module
 
 # Ensure eltorito.img exists
 if [ ! -f "$BUILD_DIR/rootfs/boot/grub/i386-pc/eltorito.img" ]; then
-    echo "Creating eltorito.img for bootloader..."
+    echo "Creating minimal eltorito.img for bootloader..."
     grub-mkstandalone --format=i386-pc --output="$BUILD_DIR/rootfs/boot/grub/i386-pc/eltorito.img" \
-        --install-modules="linux normal iso9660 biosdisk memdisk search part_msdos" \
-        --modules="linux normal iso9660 biosdisk search" \
-        --locales="" --fonts="" "boot/grub/grub.cfg=$BUILD_DIR/rootfs/boot/grub/grub.cfg"
+        --install-modules="linux normal iso9660 biosdisk search" \
+        --modules="linux normal biosdisk search" \
+        --locales="" --fonts="" \
+        "boot/grub/grub.cfg=$BUILD_DIR/rootfs/boot/grub/grub.cfg"
 fi
 
 # Create minimal root filesystem
